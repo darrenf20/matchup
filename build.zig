@@ -11,6 +11,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const utility = b.addModule("utility", .{ .root_source_file = .{ .path = "src/utility.zig" } });
+    exe.root_module.addImport("utility", utility);
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
