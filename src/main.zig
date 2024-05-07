@@ -3,11 +3,6 @@ const expect = std.testing.expect;
 const read_line = @import("utility").read_line;
 
 pub fn main() !void {
-    //std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    //const stdout_file = std.io.getStdOut().writer();
-    //var bw = std.io.bufferedWriter(stdout_file);
-    //const stdout = bw.writer();
-    //try stdout.print("Run `zig build test` to run the tests.\n", .{});
     //try bw.flush(); // don't forget to flush!
 
     //
@@ -22,7 +17,7 @@ pub fn main() !void {
         if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
     }
 
-    // Each element in list1 will be matched with an element in list2 (bijection)
+    // Each element in list1 will be matched with an element in list2
     var list1 = std.ArrayList([]const u8).init(allocator);
     var list2 = std.ArrayList([]const u8).init(allocator);
     defer {
@@ -37,30 +32,54 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     var buffer: [128]u8 = undefined;
 
+    // Create an `args` tuple to pass into the `get_list` function
+    const args = .{
+        .allocator = allocator,
+        .stdin = stdin,
+        .buffer = &buffer,
+    };
+
     //
-    // ** APP **
+    // ** GETTING LISTS **
     //
 
     try stdout.print("-- List A --\n", .{});
 
+    // Get user input until they enter an empty string
     var i: usize = 0;
-
     while (i == 0 or !std.mem.eql(u8, list1.getLast(), "")) : (i += 1) {
         try stdout.print("#{d}: ", .{i + 1});
-
-        // Read user input into buffer
-        const input = (try read_line(stdin, &buffer)).?;
-
-        // Need to copy the text in buffer, then append the copy to the list
-        const copy = try std.fmt.allocPrint(allocator, "{s}", .{input});
-        errdefer allocator.free(copy);
-
-        try list1.append(copy);
+        try get_list(&list1, args);
     }
 
-    for (list1.items) |e| {
-        try stdout.print("{s}\n", .{e});
+    // Last list element will be the empty string, so remove it
+    _ = list1.pop();
+
+    try stdout.print("-- List B --\n", .{});
+
+    for (0..list1.items.len) |j| {
+        try stdout.print("#{d} / {d}: ", .{ j, list1.items.len });
+        try get_list(&list2, args);
     }
+
+    //
+    // ** RANDOMLY ASSIGN ELEMENTS TO EACH OTHER **
+    //
+
+    for (list1.items) |item| try stdout.print("{s}\n", .{item});
+    try stdout.print("\n", .{});
+    for (list2.items) |item| try stdout.print("{s}\n", .{item});
+}
+
+fn get_list(list: *std.ArrayList([]const u8), args: anytype) !void {
+    // Read user input into buffer
+    const input = (try read_line(args.stdin, args.buffer)).?;
+
+    // Need to copy the text in buffer, then append the copy to the list
+    const copy = try std.fmt.allocPrint(args.allocator, "{s}", .{input});
+    errdefer args.allocator.free(copy);
+
+    try list.append(copy);
 }
 
 test "simple test" {
