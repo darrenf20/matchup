@@ -63,16 +63,16 @@ fn get_lists_from_file(allocator: Allocator, path: []const u8, list1: *List, lis
     const reader = file.reader();
 
     var i: usize = 0;
-    while (i == 0 or !std.mem.eql(u8, list1.getLast(), "")) : (i += 1) {
-        _ = try get_line(allocator, list1, reader);
+    while (try get_line(allocator, list1, reader) and !std.mem.eql(u8, list1.getLast(), "")) {
+        i += 1;
     }
-
     _ = list1.pop();
 
     var j: usize = 0;
-    while (j == 0 or !std.mem.eql(u8, list2.getLast(), "")) : (j += 1) {
-        _ = try get_line(allocator, list2, reader);
+    while (try get_line(allocator, list2, reader) and !std.mem.eql(u8, list2.getLast(), "")) {
+        j += 1;
     }
+    if (std.mem.eql(u8, list2.getLast(), "")) _ = list2.pop();
 
     if (i != j) {
         try stderr.print("Error: list sizes do not match\n", .{});
