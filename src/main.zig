@@ -1,12 +1,19 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const List = std.ArrayList([]const u8);
 const expect = std.testing.expect;
-const read_line = @import("utility").read_line;
+const read_line_or_null = @import("utility").read_line_or_null;
+
+// Global state
+const stdout = std.io.getStdOut().writer();
+const stderr = std.io.getStdErr().writer();
+var buffer: [128]u8 = undefined;
 
 pub fn main() !void {
     //try bw.flush(); // don't forget to flush!
 
     //
-    // ** SETUP **
+    // ** Setup **
     //
 
     // Prepare the memory allocator
@@ -14,12 +21,12 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer {
         const deinit_status = gpa.deinit();
-        if (deinit_status == .leak) expect(false) catch @panic("TEST FAIL");
+        if (deinit_status == .leak) expect(false) catch @panic("MEMORY LEAKED");
     }
 
     // Each element in list1 will be matched with an element in list2
-    var list1 = std.ArrayList([]const u8).init(allocator);
-    var list2 = std.ArrayList([]const u8).init(allocator);
+    var list1 = List.init(allocator);
+    var list2 = List.init(allocator);
     defer {
         for (list1.items) |item| allocator.free(item);
         for (list2.items) |item| allocator.free(item);
@@ -27,43 +34,22 @@ pub fn main() !void {
         list2.deinit();
     }
 
-    // Reading from stdin, writing to stdout
-    const stdin = std.io.getStdIn().reader();
-    const stdout = std.io.getStdOut().writer();
-    var buffer: [128]u8 = undefined;
-
-    // Create an `args` tuple to pass into the `get_list` function
-    const args = .{
-        .allocator = allocator,
-        .stdin = stdin,
-        .buffer = &buffer,
-    };
-
     //
-    // ** GETTING LISTS **
+    // ** Get lists from user
     //
 
-    try stdout.print("-- List A --\n", .{});
+    // Either process a file if one is given, or prompt the user to give list items
+    const argv: [][:0]u8 = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, argv);
 
-    // Get user input until they enter an empty string
-    var i: usize = 0;
-    while (i == 0 or !std.mem.eql(u8, list1.getLast(), "")) : (i += 1) {
-        try stdout.print("#{d}: ", .{i + 1});
-        try get_list(&list1, args);
-    }
-
-    // Last list element will be the empty string, so remove it
-    _ = list1.pop();
-
-    try stdout.print("-- List B --\n", .{});
-
-    for (0..list1.items.len) |j| {
-        try stdout.print("#{d} / {d}: ", .{ j, list1.items.len });
-        try get_list(&list2, args);
+    if (argv.len > 1) {
+        try get_lists_from_file(allocator, argv[1], &list1, &list2);
+    } else {
+        try get_lists_from_user(allocator, &list1, &list2);
     }
 
     //
-    // ** RANDOMLY ASSIGN ELEMENTS TO EACH OTHER **
+    // ** Randomly assign elements to each other **
     //
 
     for (list1.items) |item| try stdout.print("{s}\n", .{item});
@@ -71,15 +57,63 @@ pub fn main() !void {
     for (list2.items) |item| try stdout.print("{s}\n", .{item});
 }
 
-fn get_list(list: *std.ArrayList([]const u8), args: anytype) !void {
+fn get_lists_from_file(allocator: Allocator, path: []const u8, list1: *List, list2: *List) !void {
+    const file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+    const reader = file.reader();
+
+    var i: usize = 0;
+    while (i == 0 or !std.mem.eql(u8, list1.getLast(), "")) : (i += 1) {
+        _ = try get_line(allocator, list1, reader);
+    }
+
+    _ = list1.pop();
+
+    var j: usize = 0;
+    while (j == 0 or !std.mem.eql(u8, list2.getLast(), "")) : (j += 1) {
+        _ = try get_line(allocator, list2, reader);
+    }
+
+    if (i != j) {
+        try stderr.print("Error: list sizes do not match\n", .{});
+        std.process.exit(1);
+    }
+}
+
+fn get_lists_from_user(allocator: Allocator, list1: *List, list2: *List) !void {
+    const stdin = std.io.getStdIn().reader();
+
+    try stdout.print("-- List A --\n", .{});
+
+    // Get user input until they enter an empty string
+    var i: usize = 0;
+    while (i == 0 or !std.mem.eql(u8, list1.getLast(), "")) : (i += 1) {
+        try stdout.print("#{d}: ", .{i + 1});
+        _ = try get_line(allocator, list1, stdin);
+    }
+    _ = list1.pop(); // remove empty string from list
+
+    try stdout.print("-- List B --\n", .{});
+
+    for (0..list1.items.len) |j| {
+        try stdout.print("#{d} / {d}: ", .{ j, list1.items.len });
+        _ = try get_line(allocator, list2, stdin);
+    }
+}
+
+fn get_line(allocator: Allocator, list: *List, reader: anytype) !bool {
     // Read user input into buffer
-    const input = (try read_line(args.stdin, args.buffer)).?;
+    const input = try read_line_or_null(reader, &buffer);
 
-    // Need to copy the text in buffer, then append the copy to the list
-    const copy = try std.fmt.allocPrint(args.allocator, "{s}", .{input});
-    errdefer args.allocator.free(copy);
+    return if (input) |line| blk: {
+        // Need to copy the text in buffer, then append the copy to the list
+        const copy = try std.fmt.allocPrint(allocator, "{s}", .{line});
+        errdefer allocator.free(copy);
 
-    try list.append(copy);
+        try list.append(copy);
+
+        break :blk true;
+    } else false;
 }
 
 test "simple test" {
