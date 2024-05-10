@@ -10,3 +10,11 @@ This project shows how to do several common operations in Zig, including:
 - file I/O
 - looping
 - PRNG
+
+### Requirements:
+- [Zig (v 0.12.0)](https://ziglang.org/download/)
+
+### Usage
+- `zig build run`
+- `zig build run -- example.txt`
+
