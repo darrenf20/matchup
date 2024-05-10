@@ -52,9 +52,21 @@ pub fn main() !void {
     // ** Randomly assign elements to each other **
     //
 
-    for (list1.items) |item| try stdout.print("{s}\n", .{item});
-    try stdout.print("\n", .{});
-    for (list2.items) |item| try stdout.print("{s}\n", .{item});
+    var prng = std.rand.DefaultPrng.init(prng: {
+        var seed: u64 = undefined;
+        try std.posix.getrandom(std.mem.asBytes(&seed));
+        break :prng seed;
+    });
+    const rand = prng.random();
+
+    for (0..list1.items.len) |i| {
+        const k = rand.intRangeLessThan(usize, i, list1.items.len);
+        std.mem.swap([]const u8, &list2.items[i], &list2.items[k]);
+    }
+
+    for (list1.items, list2.items) |a, b| {
+        try stdout.print("{s} --> {s}\n", .{ a, b });
+    }
 }
 
 fn get_lists_from_file(allocator: Allocator, path: []const u8, list1: *List, list2: *List) !void {
