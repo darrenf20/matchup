@@ -10,8 +10,6 @@ const stderr = std.io.getStdErr().writer();
 var buffer: [128]u8 = undefined;
 
 pub fn main() !void {
-    //try bw.flush(); // don't forget to flush!
-
     //
     // ** Setup **
     //
